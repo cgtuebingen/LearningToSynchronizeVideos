@@ -12,7 +12,7 @@ class P2Disttest(tf.test.TestCase):
         dd = 60
 
         matA = np.random.randn(bb, mm, dd).astype(np.float32)
-        matB = np.random.randn(bb, nn, dd + 1).astype(np.float32)
+        matB = np.random.randn(bb, nn, dd).astype(np.float32)
         matB = matB.transpose(0, 2, 1)
 
         expected = np.zeros((bb, mm, nn))

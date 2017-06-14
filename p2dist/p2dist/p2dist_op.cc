@@ -155,13 +155,8 @@ public:
     const Dtype* _inA = matrix_a_flat.data();
     const Dtype* _inB = matrix_b_flat.data();
 
-    for (int b = 0; b < B; ++b)
-    {
-      P2distOpForwardCudaKernelLauncher<Dtype>(_top + M*N*b, 
-        _inA + M*D*b, _inB + N*D*b, 
-        B, M, N, D);
-    }
 
+    P2distOpForwardCudaKernelLauncher<Dtype>(_top, _inA, _inB, B, M, N, D);
     
   }
 
