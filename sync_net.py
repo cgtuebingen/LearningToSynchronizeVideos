@@ -5,21 +5,77 @@ import argparse
 import os
 import multiprocessing
 
+import cv2
 import tensorflow as tf
 from tensorflow.contrib.layers import variance_scaling_initializer
 from tensorpack import *
 from tensorpack.tfutils.symbolic_functions import *
 import tensorpack.tfutils.symbolic_functions as symbf
 from tensorpack.tfutils.summary import *
+import tensorpack.utils.logger as logger
 from data_provider import get_dump_data
+import video
+import p2dist.p2dist as p2dist
 
-TOTAL_BATCH_SIZE = 256
+TOTAL_BATCH_SIZE = 32
 INPUT_SHAPE = 224
 DEPTH = None
 
 """
 As our main focus is not model selection, we use the common ResNet-50 architecture for our task.
 """
+
+
+class OnlineCorrelationMatrix(Callback):
+    """From our paper, we know that this specific video pair should have a matching tour.
+    So we dump the correlation matrix to tensorboard.
+    """
+    def __init__(self):
+        self.left = "/graphics/scratch/wieschol/sync-data/2012-06-22/3D_L0004_noaudio.low.mp4"
+        self.right = "/graphics/scratch/wieschol/sync-data/2012-07-16/3D_L0004_noaudio.low.mp4"
+        self.skip = 10
+        self.batch = 32
+        self.cc = 0
+
+    def _setup_graph(self):
+        self.pred = self.trainer.get_predictor(['input_frames'], ['encoding'])
+
+        # compute correlation without SVD-decorrelation
+        self.plhdr_a = tf.placeholder(dtype=tf.float32)
+        self.plhdr_b = tf.placeholder(dtype=tf.float32)
+
+        correlation = p2dist.p2dist(self.plhdr_a, tf.transpose(self.plhdr_b, [0, 2, 1]))
+        correlation = tf.log(2 * tf.pow(correlation, 8) + 1)
+
+        correlation = correlation - tf.reduce_min(correlation)
+        correlation = correlation / tf.reduce_max(correlation)
+        self.correlation = correlation * 255.
+
+    def _embed_video(self, fn):
+        vid = video.Reader(fn)
+        embeddings = np.zeros((vid.frames // self.skip, 1000))
+        offset = 0
+        for frames, num in vid.batch_reader(self.batch, self.skip, resize=(224, 224)):
+            batch_embedding = self.pred([frames])[0]
+            print batch_embedding.sum()
+            embeddings[offset:offset + num, ...] = batch_embedding
+            offset += num
+
+        return np.expand_dims(embeddings, axis=0)
+
+    def _trigger_epoch(self):
+
+        emb_left = self._embed_video(self.left)
+        emb_right = self._embed_video(self.right)
+
+        cor = self.pred.sess.run(self.correlation, {self.plhdr_a: emb_left, self.plhdr_b: emb_right})
+
+        print "cor.sum()", cor.sum()
+
+        self.trainer.monitors.put_image('correlation', cor[0])
+        p = os.path.join(logger.LOG_DIR, 'correlation%i.jpg' % self.cc)
+        cv2.imwrite(p, cor[0])
+        self.cc += 1
 
 
 def normalize(x, eps=1e-12):
@@ -110,7 +166,8 @@ class Model(ModelDesc):
 
         with argscope(Conv2D, nl=tf.identity, use_bias=False,
                       W_init=variance_scaling_initializer(mode='FAN_OUT')), \
-                argscope([Conv2D, MaxPooling, GlobalAvgPooling, BatchNorm], data_format=self.data_format):
+                argscope([Conv2D, MaxPooling, GlobalAvgPooling, BatchNorm], data_format=self.data_format), \
+                argscope(BatchNorm, use_local_stat=True):
             logits = (LinearWrap(inputs)
                       .Conv2D('conv0', 64, 7, stride=2, nl=BNReLU)
                       .MaxPooling('pool0', shape=3, stride=2, padding='SAME')
@@ -138,15 +195,15 @@ class Model(ModelDesc):
         return tf.train.MomentumOptimizer(lr, 0.9, use_nesterov=True)
 
 
-def get_data(train_or_test, fake=False):
+def get_data(train_or_test):
     df = get_dump_data()
     df = PrefetchDataZMQ(df, min(20, multiprocessing.cpu_count()))
     df = BatchData(df, BATCH_SIZE)
     return df
 
 
-def get_config(fake=False, data_format='NCHW', depth=18):
-    dataset_train = get_data('train', fake=fake)
+def get_config(data_format='NCHW', depth=18):
+    dataset_train = get_data('train')
 
     return TrainConfig(
         model=Model(data_format=data_format, depth=depth),
@@ -156,6 +213,7 @@ def get_config(fake=False, data_format='NCHW', depth=18):
             ScheduledHyperParamSetter('learning_rate',
                                       [(30, 1e-2), (60, 1e-3), (85, 1e-4), (95, 1e-5)]),
             HumanHyperParamSetter('learning_rate'),
+            OnlineCorrelationMatrix()
         ],
         extra_callbacks=[
             MovingAverageSummary(),
@@ -171,13 +229,11 @@ def get_config(fake=False, data_format='NCHW', depth=18):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--gpu', help='comma separated list of GPU(s) to use.', required=True)
-    parser.add_argument('--data', help='ILSVRC dataset dir')
     parser.add_argument('--load', help='load model')
-    parser.add_argument('--fake', help='use fakedata to test or benchmark this model', action='store_true')
     parser.add_argument('--data_format', help='specify NCHW or NHWC',
                         type=str, default='NCHW')
     parser.add_argument('-d', '--depth', help='resnet depth',
-                        type=int, default=18, choices=[18, 34, 50, 101])
+                        type=int, default=50, choices=[18, 34, 50, 101])
     args = parser.parse_args()
 
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
@@ -186,7 +242,7 @@ if __name__ == '__main__':
     BATCH_SIZE = TOTAL_BATCH_SIZE // NR_GPU // 3  # we use (anchor, pos, neg)
 
     logger.auto_set_dir()
-    config = get_config(fake=args.fake, data_format=args.data_format, depth=args.depth)
+    config = get_config(data_format=args.data_format, depth=args.depth)
     if args.load:
         config.session_init = SaverRestore(args.load)
     config.nr_tower = NR_GPU

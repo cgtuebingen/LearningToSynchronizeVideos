@@ -22,18 +22,26 @@ class DumbTriplets(tp.dataflow.RNGDataFlow):
     """Yield frame triplets for phase 0
     """
     def __init__(self, pattern='/graphics/projects/scratch/wieschol/sync-data/*/*_noaudio.low.mp4',
-                 samples=10, shuffle=True, offset_positive=10, offset_negative=20, min_positive=5):
+                 samples=10, shuffle=True, max_pos_dist=10, min_neg_dist=20, min_pos_dist=5):
+        """Sample most trivial training data for phase 1 (intra-video sampling of consecutive frames)
+
+        Args:
+            pattern (str, optional): pattern for possible videos
+            samples (int, optional): number of samples for each video
+            shuffle (bool, optional): shuffle video list
+            max_pos_dist (int, optional): max offset between positive frames
+            min_neg_dist (int, optional): min offset between positive, anchor and negative
+            min_pos_dist (int, optional): min offset between positive frames
+        """
         self.files = glob.glob(pattern)
         self.shuffle = shuffle
-        self.offset_positive = offset_positive
-        self.min_positive = min_positive
-        self.offset_negative = offset_negative
+        self.max_pos_dist = max_pos_dist
+        self.min_pos_dist = min_pos_dist
+        self.min_neg_dist = min_neg_dist
         self.samples = samples
 
     def get_data(self):
         file_idx = list(range(len(self.files)))
-
-        offset = self.rng.randint(self.offset_positive - self.min_positive) + self.min_positive
 
         if self.shuffle:
             self.rng.shuffle(file_idx)
@@ -42,19 +50,22 @@ class DumbTriplets(tp.dataflow.RNGDataFlow):
             video_fn = self.files[file_id]
             vid = video.Reader(video_fn)
 
-            frames = list(range(vid.frames))[:-self.offset_positive]
+            # sample a random offset between (anchor, pos)
+            pos_dist = self.rng.randint(self.max_pos_dist - self.min_pos_dist) + self.min_pos_dist
+
+            frames = list(range(vid.frames))[:-(pos_dist + self.min_neg_dist + 1)]
             self.rng.shuffle(frames)
             frames = frames[:self.samples]
 
             for f in frames:
                 vid.jump(f)
                 anchor = vid.read()
-                vid.jump(f + offset)
+                vid.jump(f + pos_dist)
                 positive = vid.read()
 
-                neg_frames = list(range(vid.frames))[:f - self.offset_negative] +\
-                    list(range(vid.frames))[f + self.offset_negative:]
-                if len(len(neg_frames)) < 1:
+                neg_frames = list(range(vid.frames))[:f - self.min_neg_dist] +\
+                    list(range(vid.frames))[f + pos_dist + self.min_neg_dist:]
+                if len(neg_frames) < 1:
                     continue
                 neg = self.rng.randint(len(neg_frames))
                 vid.jump(neg_frames[neg])
@@ -81,9 +92,18 @@ def get_dump_data():
         imgaug.Clip(),
         imgaug.Flip(horiz=True),
         imgaug.Flip(vert=True),
+    ]
+    df = AugmentImageComponents(df, augmentors, copy=False, index=[0, 1, 2])
+
+    df = AugmentImageComponents(df, [imgaug.Rotation(7)], copy=False, index=[0])
+    df = AugmentImageComponents(df, [imgaug.Rotation(7)], copy=False, index=[1])
+    df = AugmentImageComponents(df, [imgaug.Rotation(7)], copy=False, index=[2])
+
+    augmentors = [
         imgaug.ToUint8(),
         imgaug.RandomCrop(224)
     ]
+
     df = AugmentImageComponents(df, augmentors, copy=False, index=[0, 1, 2])
     return df
 
