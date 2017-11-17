@@ -1,5 +1,5 @@
 # Learning Robust Video Synchronization without Annotations
-Patrick Wieschollek, Ido Freeman, Hendrik P.A. Lensch
+Patrick Wieschollek, Ido Freeman, Hendrik P.A. Lensch (ICMLA 2017)
 
 ![arxiv_sync](https://user-images.githubusercontent.com/6756603/32963993-fe8aeeba-cbd1-11e7-9c98-0ff1a3961d63.jpg)
 
