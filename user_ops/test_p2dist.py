@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-from p2dist import p2dist
+from __init__ import p2dist
 
 
 class P2Disttest(tf.test.TestCase):
@@ -13,15 +13,14 @@ class P2Disttest(tf.test.TestCase):
 
         matA = np.random.randn(bb, mm, dd).astype(np.float32)
         matB = np.random.randn(bb, nn, dd).astype(np.float32)
-        matB = matB.transpose(0, 2, 1)
 
         expected = np.zeros((bb, mm, nn))
-        for b in xrange(bb):
+        for b in range(bb):
             for m in range(mm):
                 for n in range(nn):
                     aa = matA[b, m, :]
-                    bb = matB[b, :, n]
-                    dot = (aa - bb).dot(((aa - bb)))
+                    bb = matB[b, n, :]
+                    dot = (aa - bb.T).dot(((aa - bb.T)))
                     expected[b, m, n] = dot
 
         tensorA = tf.Variable(matA, dtype=tf.float32)

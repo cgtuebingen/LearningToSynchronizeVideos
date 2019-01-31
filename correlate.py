@@ -1,6 +1,6 @@
 import h5py
 import tensorflow as tf
-import p2dist.p2dist as p2dist
+from user_ops import p2dist
 import numpy as np
 import cv2
 import argparse

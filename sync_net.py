@@ -15,7 +15,7 @@ from tensorpack.tfutils.summary import *
 import tensorpack.utils.logger as logger
 from data_provider import get_dump_data
 import video
-import p2dist.p2dist as p2dist
+from user_ops import p2dist
 
 TOTAL_BATCH_SIZE = 32
 INPUT_SHAPE = 224
@@ -28,7 +28,7 @@ As our main focus is not model selection, we use the common ResNet-50 architectu
 
 class OnlineCorrelationMatrix(Callback):
     """From our paper, we know that this specific video pair should have a matching tour.
-    So we dump the correlation matrix to tensorboard.
+    So we dump the correlation matrix to tensorboard when re-training.
     """
     def __init__(self):
         self.left = "/graphics/scratch/wieschol/sync-data/2012-06-22/3D_L0004_noaudio.low.mp4"
