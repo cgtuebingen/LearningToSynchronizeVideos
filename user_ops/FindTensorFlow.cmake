@@ -123,7 +123,7 @@ else()
     # However, only TensorFlow versions 1.9, 1.10 support all header files
     # for custom ops.
     set(_TensorFlow_KNOWN_VERSIONS ${TensorFlow_ADDITIONAL_VERSIONS}
-        "1.9" "1.9.0" "1.10" "1.10.0" "1.11" "1.11.0" "1.12" "1.12.0")
+        "1.9" "1.9.0" "1.10" "1.10.0" "1.11" "1.11.0" "1.12" "1.12.0" "1.15")
     set(_TensorFlow_TEST_VERSIONS)
 
     if(TF_FIND_VERSION)
@@ -188,6 +188,7 @@ if(${TF_DISABLE_ASSERTS})
   add_definitions("-DNDEBUG=True")
 endif()
 
+set(FPHSA_NAME_MISMATCHED TRUE)
 find_library(TensorFlow_C_LIBRARY
   NAMES libtensorflow_cc.so
   PATHS $ENV{TENSORFLOW_BUILD_DIR}

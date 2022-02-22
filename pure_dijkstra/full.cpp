@@ -16,13 +16,20 @@ python setup.py clean && python setup.py build && python setup.py install --user
 
 template <typename T>
 class Mat {
+    private:
+        bool is_data_allocated;
  public:
   T* data;
   int width, height;
 
-  Mat(T* d, const int h, const int w) : data(d), width(w), height(h) {}
-  Mat() : width(0), height(0) {}
-  Mat(const int h, const int w) : width(w), height(h) { data = new T[w * h]; }
+  Mat(T* d, const int h, const int w) : data(d), width(w), height(h), is_data_allocated(false) {}
+  Mat() : width(0), height(0), is_data_allocated(false) {}
+  Mat(const int h, const int w) : width(w), height(h), is_data_allocated(true) { data = new T[w * h]; }
+  ~Mat() {
+      if (is_data_allocated) {
+          delete[] data;
+      }
+  }
 
   inline T& operator()(int x, int y) { return data[x * width + y]; }
 
